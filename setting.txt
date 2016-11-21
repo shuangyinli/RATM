@@ -1,0 +1,13 @@
+pi_learn_rate 0.00001
+max_pi_iter 100
+pi_min_eps 0.00001
+max_xi_iter 100
+xi_learn_rate 10
+xi_min_eps 0.00001
+max_em_iter 100
+num_threads 1
+sen_var_converence 1e-10
+sen_max_var_iter 30
+doc_var_converence 0.001
+doc_max_var_iter 3
+em_converence 1e-4

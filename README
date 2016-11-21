@@ -1,0 +1,14 @@
+RATM
+
+Please use the code as follows:
+
+－－－－－－－－－－－－－－－－－－－－－－
+cd [your path]/ratm/
+
+chmod 777 ./example.sh
+
+./example.sh
+
+－－－－－－－－－－－－－－－－－－－－－－
+
+
