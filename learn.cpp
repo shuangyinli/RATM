@@ -73,7 +73,6 @@ void learnPi(senDocument** corpus, Model* model, Configuration* configuration) {
     do {
     	initPi(model->pi,win);
         z = getPiFunction(corpus,model);
-        fprintf(stderr, "wait for z >=0\n");
         num_wait_for_z ++;
     }
     while ( z < 0 && num_wait_for_z <= 20);
