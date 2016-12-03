@@ -14,7 +14,6 @@
 using namespace std;
 void readinitParameters(senDocument** corpus, Model* model, char* beta_file){
 
-	// init the log beta
 	FILE* fp_beta = fopen(beta_file, "r");
 	double * log_beta_ = model->log_beta;
 	int num_topics = model->num_topics;
