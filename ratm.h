@@ -174,8 +174,7 @@ double quick_corpuslikelihood(senDocument** corpus, Model* model);
 void print_mat(double* mat, int row, int col, char* filename);
 void printParameters(senDocument** corpus, int num_round, char* model_root, Model* model);
 void print_lik(double* likehood_record, int num_round, char* model_root);
-void readinitParameters(senDocument** corpus, Model* model, char* beta_file, char* topic_file);
+void readinitParameters(senDocument** corpus, Model* model, char* beta_file);
 void saveDocumentsTopicsSentencesAttentions(senDocument** corpus, Model* model, char* output_dir);
-void readinitDocTopics(senDocument** corpus, Model* model, char* topic_file);
 
 #endif

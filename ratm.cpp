@@ -587,7 +587,7 @@ void begin_ratm(char* inputfile, char* settingfile, int num_topics, int win_, ch
 }
 
 
-void infer_ratm(char* test_file, char* settingfile, char* G0, char* model_root, char* prefix, char* topic_file, char* out_dir=NULL) {
+void infer_ratm(char* test_file, char* settingfile, char* G0, char* model_root, char* prefix, char* out_dir=NULL) {
     setbuf(stdout,NULL);
     Model* model = new Model(model_root, prefix);
     int num_topics = model->num_topics;
@@ -600,8 +600,8 @@ void infer_ratm(char* test_file, char* settingfile, char* G0, char* model_root, 
     //readData(char* filename, int num_topics,int& num_words, int& num_docs, int& num_all_words, int& win){
     senDocument** corpus = readData(test_file,num_topics,num_test_words,num_test_docs, num_test_all_words, win);
     model->num_docs = num_test_docs;
-    readinitDocTopics(corpus, model, topic_file);
-
+    
+	initDocTopics(corpus, model);
     Configuration configuration = Configuration(settingfile);
     runThreadInference(corpus, model, &configuration);
 
@@ -617,60 +617,6 @@ void infer_ratm(char* test_file, char* settingfile, char* G0, char* model_root, 
         delete corpus[i];
     }
     delete[] corpus;
-}
-
-void readinitDocTopics(senDocument** corpus, Model* model, char* topic_file){
-
-	int num_topics = model->num_topics;
-
-	//init the topic distribution of each document, log_topic
-	int num_docs = model->num_docs;
-	double* topicM = new double[num_docs*num_topics];
-
-	FILE* fp_topics = fopen(topic_file, "r");
-	for(int i =0; i<num_docs; i++){
-		for(int j=0; j<num_topics; j++){
-			fscanf(fp_topics, "%lf", &topicM[i*num_topics + j]);
-		}
-	}
-	fclose(fp_topics);
-	//normalized the ditribution before log it.
-	for(int i =0; i<num_docs; i++){
-		double tem = 0.0;
-		for(int j=0; j<num_topics; j++){
-			tem += topicM[i*num_topics + j];
-		}
-		for(int j=0; j<num_topics; j++){
-			corpus[i]->doctopic[j] = log(topicM[i*num_topics + j] / tem);
-			corpus[i]->rou[j] = topicM[i*num_topics + j] / tem;
-		}
-		int winsentenceno = corpus[i]->docwin+corpus[i]->num_sentences;
-		for(int s=0; s<winsentenceno; s++){
-			for(int j=0; j<num_topics; j++){
-			    	corpus[i]->docTopicMatrix[s*num_topics + j] = corpus[i]->doctopic[j];
-			 }
-		}
-	}
-	delete topicM;
-
-	//init all the sentence's topic distribution with the document topic distribution
-	for(int d=0; d<num_docs; d++){
-		int senno = corpus[d]->num_sentences;
-		double* topic = corpus[d]->doctopic;
-		for(int s= 0; s<senno; s++){
-			for(int k = 0; k<num_topics; k++){
-				corpus[d]->sentences[s]->topic[k] = topic[k];
-			}
-			for(int w =0; w< model->win; w++){
-				for(int k = 0; k<num_topics; k++){
-					//init all the fore topic distributions for each sentence. by document topics
-					corpus[d]->sentences[s]->wintopics[w*num_topics +k] = topic[k];
-				}
-			}
-
-		}
-	}
-
 }
 
 ///////////////////////////////////
@@ -777,10 +723,10 @@ int main(int argc, char* argv[]) {
 	}else if(argc > 1 && argc == 9 && strcmp(argv[1],"est") == 0){
 		printf("Now begin training with initial parameters...\n");
 		begin_ratm(argv[2],argv[3],atoi(argv[4]),atoi(argv[5]),argv[6], argv[7],argv[8]);
-	}else if(argc > 1 && argc == 9 && strcmp(argv[1],"inf") == 0){
+	}else if(argc > 1 && argc == 8 && strcmp(argv[1],"inf") == 0){
 		printf("Now begin inference...\n");
 		//infer_rbm(char* test_file, char* settingfile, char* model_root, char* prefix, char* out_dir=NULL)
-		infer_ratm(argv[2], argv[3], argv[4],argv[5], argv[6],argv[7],argv[8]);
+		infer_ratm(argv[2], argv[3], argv[4],argv[5], argv[6],argv[7]);
 	}
 	else {
 		printf("Please use the following setting.\n");
@@ -797,7 +743,7 @@ int main(int argc, char* argv[]) {
 				"./ratm est <input data file> <setting.txt> <num_topics> <num_windows> <G0> <model save dir> <topic_dis_overwords_beta file >\n\n");
 		printf("**************Inference**********************\n");
 		printf(
-				"./ratm inf <input test data file> <setting.txt> <G0> <model dir> <perfix> <pre_doc_topic_file> <output dir>\n");
+				"./ratm inf <input test data file> <setting.txt> <G0> <model dir> <perfix> <output dir>\n");
 		printf("\n");
 	}
 	return 0;
