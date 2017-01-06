@@ -15,8 +15,6 @@ rm -f ./output/*
 
 echo
 
-time ./ratm est ./input/train setting.txt 10 4 N ./output ./input/init_beta
+time ./ratm est setting.txt ./input/train.txt ./output/ ./input/final.beta
 
 echo
-
-time ./ratm inf ./input/test setting.txt N ./output/ final ./output

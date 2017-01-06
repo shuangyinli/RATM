@@ -6,27 +6,15 @@
 #include "string.h"
 #include "utils.h"
 #include "map"
+#include "vector"
+#include "set"
 
 #include "inference.h"
 #include "learn.h"
 #include "ratm.h"
-
+#include "cstdlib"
+#include "algorithm"
 using namespace std;
-void readinitParameters(senDocument** corpus, Model* model, char* beta_file){
-
-	FILE* fp_beta = fopen(beta_file, "r");
-	double * log_beta_ = model->log_beta;
-	int num_topics = model->num_topics;
-	int num_words = model->num_words;
-	for (int i = 0; i < num_topics; i++) {
-		for (int j = 0; j < num_words; j++) {
-			fscanf(fp_beta, "%lf", &log_beta_[i * num_words + j]);
-		}
-	}
-	fclose(fp_beta);
-
-}
-
 /*
 	    *
 	    *the corpus format is
@@ -55,7 +43,7 @@ senDocument ** readData(char* filename, int num_topics,int& num_words, int& num_
 	   int doc_num_sentences;
 
 	    while(fscanf(fp,"%d",&doc_num_sentences) != EOF) {
-	    	int doc_num_all_words = 0;
+	    	int doc_num_all_words = 1;
 	        Sentence ** sentences = new Sentence * [ doc_num_sentences];
 	        for(int i = 0; i < doc_num_sentences; i++){
 	        	int word_num_inSen;
@@ -75,15 +63,33 @@ senDocument ** readData(char* filename, int num_topics,int& num_words, int& num_
 	        num_all_words +=doc_num_all_words;
 	    }
 	    fclose(fp);
-	    printf("num_docs: %d\nnum_words:%d\n",num_docs,num_words);
+	    num_words += 1;
+	    //printf("num_docs: %d\nnum_words:%d\n",num_docs,num_words);
 	    return corpus;
+}
+
+void readinitParameters(Model* model, char* beta_file){
+
+	FILE* fp_beta = fopen(beta_file, "r");
+	double * log_beta_ = model->log_beta;
+	int num_topics = model->num_topics;
+	int num_words = model->num_words;
+	for (int i = 0; i < num_topics; i++) {
+		for (int j = 0; j < num_words; j++) {
+			fscanf(fp_beta, "%lf", &log_beta_[i * num_words + j]);
+		}
+	}
+	fclose(fp_beta);
+
 }
 
 void Configuration::read_settingfile(char* settingfile){
 	FILE* fp = fopen(settingfile,"r");
 	    char key[100];
+	    char test_action[100];
 	    while (fscanf(fp,"%s",key)!=EOF){
-	        if (strcmp(key,"pi_learn_rate")==0) {
+
+                if (strcmp(key,"pi_learn_rate")==0) {
 	            fscanf(fp,"%lf",&pi_learn_rate);
 	            continue;
 	        }
@@ -113,22 +119,47 @@ void Configuration::read_settingfile(char* settingfile){
 	        }
 	        if (strcmp(key,"num_threads") == 0) {
 	            fscanf(fp, "%d", &num_threads);
+	            continue;
 	        }
 	        if (strcmp(key, "sen_var_converence") == 0) {
 	            fscanf(fp, "%lf", &sen_var_converence);
+	            continue;
 	        }
 	        if (strcmp(key, "sen_max_var_iter") == 0) {
 	            fscanf(fp, "%d", &sen_max_var_iter);
+	            continue;
 	        }
 	        if (strcmp(key, "doc_var_converence") == 0) {
 	            fscanf(fp, "%lf", &doc_var_converence);
+	            continue;
 	        }
 	        if (strcmp(key, "doc_max_var_iter") == 0) {
 	            fscanf(fp, "%d", &doc_max_var_iter);
+	            continue;
 	        }
 	        if (strcmp(key, "em_converence") == 0) {
 	            fscanf(fp, "%lf", &em_converence);
+	            continue;
 	        }
+ 			if (strcmp(key, "num_topics") == 0) {
+	            fscanf(fp, "%d", &num_topics);
+	            continue;
+	        }
+			if (strcmp(key, "window") == 0) {
+	            fscanf(fp, "%d", &win);
+	            continue;
+	        }
+	        if (strcmp(key, "G0") == 0) {
+	            fscanf(fp, "%d", &G0);
+	            continue;
+	        }
+
+	        if (strcmp(key, "test") == 0) {
+	            fscanf(fp, "%s", test_action);
+	        }
+
+	        if (strcmp(test_action, "no")==0) test = 0;
+	        else test =1;
 	    }
 }
 void Model::init(Model* init_model) {
@@ -226,13 +257,18 @@ void Model::read_model_info(char* model_root) {
     while (fscanf(fp,"%s%d",str,&value)!=EOF) {
         if (strcmp(str, "num_words:") == 0)num_words = value;
         if (strcmp(str, "num_topics:") == 0)num_topics = value;
-        if (strcmp(str, "num_docs:") == 0)num_docs = value;
-        if (strcmp(str, "num_all_words:") == 0)num_all_words = value;
+
+		if (strcmp(str, "num_docs:") == 0) num_docs = value;
+        if (strcmp(str, "test_num_docs:") == 0)test_num_docs = value;
+        if (strcmp(str, "train_num_docs:") == 0)train_num_docs = value;
+
+        if (strcmp(str, "num_all_words_in_test:") == 0)num_all_words_in_test = value;
+        if (strcmp(str, "num_all_words_in_train:") == 0)num_all_words_in_train = value;
+
         if (strcmp(str, "win:") == 0)win = value;
+        if (strcmp(str, "G0:") == 0)G0 = value;
+
     }
-    char g[10];
-    fscanf(fp,"%s%s",str,g);
-    if (strcmp(str, "G0:") == 0) G0 = g;
     printf("num_words: %d\nnum_topics: %d\n",num_words, num_topics);
     fclose(fp);
 }
@@ -255,14 +291,19 @@ void print_model_info(char* model_root, Model* model, senDocument** corpus) {
     FILE* fp = fopen(filename,"w");
     fprintf(fp, "num_words: %d\n", model->num_words);
     fprintf(fp, "num_topics: %d\n", model->num_topics);
+
     fprintf(fp, "num_docs: %d\n", model->num_docs);
-    fprintf(fp, "num_all_words: %d\n", model->num_all_words);
+    fprintf(fp, "test_num_docs: %d\n", model->test_num_docs);
+    fprintf(fp, "train_num_docs: %d\n", model->train_num_docs);
+
+    fprintf(fp, "num_all_words_in_test: %d\n", model->num_all_words_in_test);
+    fprintf(fp, "num_all_words_in_train: %d\n", model->num_all_words_in_train);
     fprintf(fp, "win: %d\n", model->win);
-    fprintf(fp, "G0: %s\n", model->G0);
+    fprintf(fp, "G0: %d\n", model->G0);
     fclose(fp);
 }
-
-double corpuslikelihood(senDocument** corpus, Model* model) {
+/*
+double inference_corpuslikelihood(senDocument** corpus, Model* model) {
     int num_docs = model->num_docs;
     double lik = 0.0;
     for (int d = 0; d < num_docs; d++) {
@@ -274,18 +315,18 @@ double corpuslikelihood(senDocument** corpus, Model* model) {
     return lik;
 }
 
-double compute_doc_likelihood(senDocument* doc, Model* model) {
+double inference_doc_likelihood(senDocument* doc, Model* model) {
     double lik = 0.0;
     for(int s=0; s<doc->num_sentences; s++){
     	Sentence* sentence = doc->sentences[s];
-    	double temp_lik = compute_sen_likelihood(sentence,model);
+    	double temp_lik = inference_sen_likelihood(sentence,model);
     	lik+=temp_lik;
     	doc->sentences[s]->senlik =temp_lik;
     }
     return lik;
 }
-
-double compute_sen_likelihood(Sentence* sentence, Model* model){
+*/
+double inference_sen_likelihood(Sentence* sentence, Model* model){
 		double lik = 0.0;
 
 		double* log_topic = sentence->topic;
@@ -319,40 +360,40 @@ double compute_sen_likelihood(Sentence* sentence, Model* model){
 		    int wordid = sentence->words_ptr[i];
 		    temp = log_topic[0] + log_beta[wordid];
 		    for (int k = 1; k < num_topics; k++) temp = util::log_sum(temp, log_topic[k] + log_beta[k * num_words + wordid]);
-		    lik += temp * sentence->words_cnt_ptr[i];
+		    lik += temp; //* sentence->words_cnt_ptr[i];
 		}
 		delete[] reset_log_topic;
 		return lik;
 }
 
 
-double corpuslikelihood2(senDocument** corpus, Model* model) {
-    int num_docs = model->num_docs;
+double corpuslikelihood(senDocument** corpus, Model* model, int num_docs) {
     double lik = 0.0;
     for (int d = 0; d < num_docs; d++) {
-        double temp_lik = compute_doc_likelihood2(corpus[d],model);
+        double temp_lik = compute_doc_likelihood(corpus[d],model);
         lik += temp_lik;
     }
     return lik;
 }
 
-double compute_doc_likelihood2(senDocument* doc, Model* model) {
-    double lik = 0.0;
+double compute_doc_likelihood(senDocument* doc, Model* model) {
+    double lik = 0.0; 
     for(int s=0; s<doc->num_sentences; s++){
     	Sentence* sentence = doc->sentences[s];
-    	double temp_lik = compute_sen_likelihood2(doc, sentence, model);
+    	double temp_lik = compute_sen_likelihood(doc, sentence, model);
     	lik+=temp_lik;
     }
     return lik;
 }
 
-double compute_sen_likelihood2(senDocument* doc, Sentence* sentence, Model* model){
+double compute_sen_likelihood(senDocument* doc, Sentence* sentence, Model* model){
 		double lik = 0.0;
 		double* log_beta = model->log_beta;
 		int num_topics = model->num_topics;
 		int num_words = model->num_words;
 		double* log_topic = new double[num_topics];
 		memcpy(log_topic, doc->doctopic, sizeof(double) * num_topics);
+		//memcpy(log_topic, sentence->topic, sizeof(double) * num_topics);
 		bool* reset_log_topic = new bool[num_topics];
 		memset(reset_log_topic, false, sizeof(bool) * num_topics);
 
@@ -360,17 +401,17 @@ double compute_sen_likelihood2(senDocument* doc, Sentence* sentence, Model* mode
 		for (int i = 0; i < sen_num_words; i++) {
 			double temp = 0;
 		    int wordid = sentence->words_ptr[i];
+
 		    temp = log_topic[0] + log_beta[wordid];
 		    for (int k = 1; k < num_topics; k++) temp = util::log_sum(temp, log_topic[k] + log_beta[k * num_words + wordid]);
-		    lik += temp * sentence->words_cnt_ptr[i];
+		    lik += temp; //* sentence->words_cnt_ptr[i];
 		}
 		delete[] log_topic;
 		delete[] reset_log_topic;
 		return lik;
 }
 
-Sentence ** convert_to_lda_corpus(senDocument ** batch_corpus, Model* model){
-	int num_docs = model->num_docs;
+Sentence ** convert_to_lda_corpus(senDocument ** batch_corpus, Model* model, int num_docs){
 	int num_topics = model->num_topics;
 	int win = model->win;
 
@@ -456,11 +497,80 @@ double lda_inference(Sentence* doc, Model* model, double* var_gamma, double** ph
     return 0.0;
 }
 
-void initDocTopics(senDocument** corpus, Model* model){
+void initDocTopics2(senDocument** corpus, Model* model){
 	int num_docs = model->num_docs;
+    int num_words = model->num_words;
+    int num_topics = model->num_topics;
+	double* sum_phi_w = new double[num_words];
+    printf("num_docs: %d\nnum_words: %d\nnum_topics: %d\n", num_docs, num_words, num_topics);
+    for (int w = 0; w < num_words; w++) {
+        sum_phi_w[w] = 0.0;
+        for (int k =0; k < num_topics; k++) sum_phi_w[w] += exp(model->log_beta[k * num_words + w]);
+    }
+
+	Sentence ** lda_corpus = convert_to_lda_corpus(corpus, model, num_docs);
+
+    for (int d = 0; d < num_docs; d++) {
+       senDocument* doc = corpus[d];
+       int num_sentences = doc->num_sentences;
+       for(int s = 0; s< num_sentences; s++){
+    	   Sentence * sentence = doc->sentences[s];
+    	   double* topic = sentence->topic;
+    	   int sen_num_words = sentence->num_words;
+    	   double sum_topic = 0;
+    	   for(int k = 0; k < num_topics; k++){
+    		   topic[k] = 0;
+    		   for (int w = 0; w < sen_num_words; w++) {
+    		         int wordid = sentence->words_ptr[w];
+    		         topic[k] += exp(model->log_beta[k * num_words + wordid])/sum_phi_w[wordid];
+    		   }
+    		   sum_topic += topic[k];
+    	   }
+    	   for (int k = 0; k < num_topics; k++) topic[k] /= sum_topic;
+    	   sentence->senlik = 0;
+    	   for (int w = 0; w < sen_num_words; w++) {
+    		   int wordid = sentence->words_ptr[w];
+    	       double sum_pr = 0;
+    	       for (int k = 0; k < num_topics; k++) {
+    	    	   sum_pr += topic[k] * exp(model->log_beta[k * num_words + wordid]);
+    	       }
+    	       sentence->senlik += log(sum_pr) * sentence->words_cnt_ptr[w];
+    	   }
+       }
+
+       Sentence* lda_doc = lda_corpus[d];
+       double* lda_topic = lda_doc->topic;
+       int lda_num_words = lda_doc->num_words;
+       double sum_topic = 0.0;
+       for(int k = 0; k < num_topics; k++){
+    		lda_topic[k] = 0;
+    		for (int w = 0; w < lda_num_words; w++) {
+    		         int wordid = lda_doc->words_ptr[w];
+    		         lda_topic[k] += exp(model->log_beta[k * num_words + wordid])/sum_phi_w[wordid];
+    		}
+    		sum_topic += lda_topic[k];
+    	}
+    	for (int k = 0; k < num_topics; k++) {
+    		doc->doctopic[k] = log(lda_topic[k]/sum_topic);
+    		doc->rou[k] = lda_topic[k]/sum_topic;
+    	}
+
+    	int winsentenceno = doc->docwin + doc->num_sentences;
+		for(int s=0; s<winsentenceno; s++)
+			for(int k=0; k<num_topics; k++)
+				doc->docTopicMatrix[s*num_topics + k] = doc->doctopic[k];
+
+    }
+    delete[] sum_phi_w;
+}
+
+void initDocTopics(senDocument** corpus, Model* model){
+	int num_docs =  model->num_docs;
 	int num_topics = model->num_topics;
 
-	Sentence ** lda_corpus = convert_to_lda_corpus(corpus, model);
+
+	Sentence ** lda_corpus = convert_to_lda_corpus(corpus, model, num_docs);
+
 	for(int i =0; i<num_docs; i++){
 		Sentence* doc = lda_corpus[i];
 		int num_words_in_doc = doc->num_words;
@@ -503,110 +613,188 @@ void initDocTopics(senDocument** corpus, Model* model){
 			}
 		}
 	}
+	
 
 }
 
-void begin_ratm(char* inputfile, char* settingfile, int num_topics, int win_, char* G0,
-		char* model_root, char* beta_file = NULL, char* topic_file = NULL) {
+void split_corpus(senDocument ** corpus, senDocument ** test_corpus, senDocument ** train_corpus,
+ 				int num_docs, int test_num_docs, int train_num_docs, 
+ 				int& num_all_words_in_test, int& num_all_words_in_train){
+
+	srand( (unsigned)time(NULL) ); 
+	vector<int> poker_index;
+	for (int num = 0; num < num_docs; ++num) poker_index.push_back(num);
+	//random_shuffle(poker_index.begin(), poker_index.end());
+
+	set<int> test_index_set, train_index_set;
+	for (int i = 0; i < train_num_docs; i++) train_index_set.insert(poker_index[i]);
+	for (int i = train_num_docs; i < train_num_docs+test_num_docs; i++) test_index_set.insert(poker_index[i]);
+	
+	set<int>::iterator test_it;
+	int num_test = 0;
+	for(test_it=test_index_set.begin();test_it!=test_index_set.end();test_it++){
+		int id = *test_it;
+		test_corpus[num_test] = corpus[id];
+		senDocument * doc = corpus[id];
+		num_all_words_in_test += doc->num_total_words;
+
+		num_test++;
+	}
+	
+	set<int>::iterator train_it;
+	int num_train = 0;
+	for(train_it=train_index_set.begin();train_it!=train_index_set.end();train_it++){
+		int id = *train_it;
+		train_corpus[num_train] = corpus[id];
+		num_all_words_in_train += train_corpus[num_train]->num_total_words;
+		num_train++;
+	}
+
+}
+
+void begin_ratm(char* settingfile, char* inputfile, char* model_root, char* beta_file = NULL) {
 	setbuf(stdout, NULL);
+	Configuration config = Configuration(settingfile);
+	int win = config.win;
+	int num_topics = config.num_topics;
+
     int num_docs;
     int num_words;
     int num_all_words;
-    int win;
-    if(!strcmp(G0,"D")){
-    	win = win_+1;
-    }else if(!strcmp(G0,"N")){
-    	win = win_;
-    }
+    
+   	int G0 = config.G0;
+   	if(G0 == 1) {
+   		puts("Use the topic distribution of doc as the G0.");
+   	 	win = win+1;
+   	} else {
+   		puts("Ignore the G0.");
+   		win = win;
+   	}
+   	printf("The window size is %d, and the number of topics is %d. \n", win, num_topics);
     srand(unsigned(time(0)));
     senDocument** corpus = readData(inputfile,num_topics,num_words,num_docs, num_all_words, win);
-    Model* model = new Model(num_docs,num_words,num_topics, win, num_all_words, G0);
-    Configuration config = Configuration(settingfile);
+	
+	
+	int num_all_words_in_test = 0;
+    int num_all_words_in_train = 0;
+    int test_num_docs =0;
+
+	if(config.test == 1){
+		test_num_docs = int(floor(num_docs*0.2));
+	}
+    
+    int train_num_docs = num_docs-test_num_docs;
+
+    senDocument ** test_corpus = new senDocument * [test_num_docs];
+    senDocument ** train_corpus = new senDocument * [train_num_docs];
+    split_corpus(corpus, test_corpus, train_corpus, 
+    	num_docs, test_num_docs, train_num_docs, num_all_words_in_test, num_all_words_in_train);
+
+    if(config.test == 1){
+    	printf("The test set contains %d docs, and total %d words. \n", test_num_docs, num_all_words_in_test);
+		printf("The train set contains %d docs, and total %d words. \n", train_num_docs, num_all_words_in_train);
+	} else printf("The train set contains %d docs, and total %d words. \n", train_num_docs, num_all_words_in_train);
+
+    //model for train set
+    Model* model = new Model(num_docs, test_num_docs, train_num_docs,
+		num_all_words_in_test, num_all_words_in_train, num_words, num_topics, win, G0);
+    
+
     //save the model
     print_model_info(model_root, model, corpus);
-    printf("The selected G0 is %s.\n\n", G0);
-    //save the time cost
-    char time_log_filename[100];
-    sprintf(time_log_filename, "%s/costtime.log", model_root);
-    FILE* time_log_fp = fopen(time_log_filename,"w");
-    setbuf(time_log_fp, NULL);
-
+    
     time_t learn_begin_time = time(0);
     int num_round = 0;
-    printf("compute likelihood...\n");
-    double lik = corpuslikelihood(corpus,model);
+    
     // init the beta and topics
     if(beta_file){
-    	 readinitParameters(corpus, model, beta_file);
+    	 readinitParameters(model, beta_file);
     }
-    printf("init the topics by lda...");
+    printf("Initialize the topics by lda... \n\n");
     initDocTopics(corpus, model);
 
+    double lik_train = 0.0;
+    double lik_test = 0.0;
     double plik;
-
     double converged = 1;
+    puts("Now begin to train: ");
     do {
         time_t cur_round_begin_time = time(0);
-        plik = lik;
-        printf("Round %d begin...\n", num_round);
-        printf("inference...");
-        runThreadInference(corpus, model, &config);
+        plik = lik_train;
+        printf("Round %d -> ", num_round);
+        //printf("run inference...");
+        runThreadInference(train_corpus, model, &config, train_num_docs);
+        //note that, we update the pi and beta only USING train_corpus.
+        learnPi(train_corpus, model, &config, train_num_docs);
+        learnBeta(train_corpus, model, train_num_docs);
 
-        printf(" learn pi ...\n");
-        learnPi(corpus,model,&config);
+		//printf("compute loglikelihood on train set.\n");
+        lik_train = corpuslikelihood(train_corpus, model, train_num_docs);
+        double perplexity_train = exp(-lik_train/num_all_words_in_train);
 
-        printf("learn Beta...");
-        learnBeta(corpus,model);
-
-        printf(" cal likehood... and likehood2bydoc...\n");
-        lik = corpuslikelihood(corpus,model);
-        double perplex = exp(-lik/model->num_all_words);
-
-        double lik2 = corpuslikelihood2(corpus,model);
-        double perplex2 = exp(-lik2/model->num_all_words);
-
-        converged = (plik - lik) / plik;
+        converged = (plik - lik_train) / plik;
         if (converged < 0) config.doc_max_var_iter *= 2;
 
         unsigned int cur_round_cost_time = time(0) - cur_round_begin_time;
-		printf("Round %d: likehood=%lf last_likehood=%lf perplex1=%lf converged=%lf cost_time=%u secs. And likehood of doc = %lf perplex of doc=%lf\n",
-				num_round, lik, plik, perplex, converged, cur_round_cost_time,lik2, perplex2);
+
+		printf("loglikelihood =%lf, perplexity=%lf, converged=%lf, time=%u secs.\n", 
+			lik_train, perplexity_train, converged, cur_round_cost_time);
 		num_round += 1;
 
-        if (num_round % 5 == 0)printParameters(corpus,num_round, model_root, model);
+        if (num_round % 20 == 0){
+        	printParameters(corpus,num_round, model_root, model);
+        	// run test set every 5 rounds.
+        	if(config.test == 1){
+	        	printf("Verify on Test Set -> ");
+	        	double lik_test = verifyTestSet(test_corpus, model, &config, test_num_docs);
+				double perplexity_test = exp(-lik_test/num_all_words_in_test);
+				printf("loglikelihood on test=%lf, test perplexity=%lf.\n", lik_test, perplexity_test);
+			}
+        }
     }
     while (num_round < config.max_em_iter && (converged < 0 || converged > config.em_converence || num_round < 10));
     unsigned int learn_cost_time = time(0) - learn_begin_time;
  	printf("all learn runs %d rounds and cost %u secs.\n", num_round, learn_cost_time);
     printParameters(corpus,-1,model_root, model);
 
+	if(config.test == 1){
+	        	printf("Verify on Test Set -> ");
+	        	double lik_test = verifyTestSet(test_corpus, model, &config, test_num_docs);
+				double perplexity_test = exp(-lik_test/num_all_words_in_test);
+				printf("loglikelihood on test=%lf, test perplexity=%lf.\n", lik_test, perplexity_test);
+	}
+
     delete model;
-    for (int i = 0; i < num_docs; i++)delete corpus[i];
+    for (int i = 0; i < num_docs; i++) delete corpus[i];
     delete[] corpus;
 	
 }
 
 
-void infer_ratm(char* test_file, char* settingfile, char* G0, char* model_root, char* prefix, char* out_dir=NULL) {
+void infer_ratm(char* settingfile, char* test_file, char* model_root, char* prefix, char* out_dir=NULL) {
     setbuf(stdout,NULL);
+    Configuration configuration = Configuration(settingfile);
+
     Model* model = new Model(model_root, prefix);
     int num_topics = model->num_topics;
     int win = model->win;
-    model->G0 = G0;
+   
     int num_test_words;
     int num_test_docs;
     int num_test_all_words;
     srand(unsigned(time(0)));
     //readData(char* filename, int num_topics,int& num_words, int& num_docs, int& num_all_words, int& win){
     senDocument** corpus = readData(test_file,num_topics,num_test_words,num_test_docs, num_test_all_words, win);
-    model->num_docs = num_test_docs;
+    model->num_all_words_in_test = num_test_all_words;
+    model->test_num_docs = num_test_docs;
+    model->train_num_docs = 0;
     
 	initDocTopics(corpus, model);
-    Configuration configuration = Configuration(settingfile);
-    runThreadInference(corpus, model, &configuration);
+    
+    runThreadInference(corpus, model, &configuration, num_test_docs);
 
-    double lik = corpuslikelihood(corpus, model);
-    double perplex = exp(-lik/model->num_all_words);
+    double lik = corpuslikelihood(corpus, model, num_test_docs);
+    double perplex = exp(-lik/num_test_all_words);
     printf("likehood: %lf perplexity:%lf num all words: %d\n", lik, perplex, num_test_all_words);
 
     if (out_dir) {
@@ -656,7 +844,6 @@ void printParameters(senDocument** corpus, int num_round, char* model_root, Mode
     fclose(liks_fp);
 }
 
-
 void saveDocumentsTopicsSentencesAttentions(senDocument** corpus, Model * model, char* output_dir) {
     char filename[1000];
     sprintf(filename, "%s/test_doc_dis_overtopics.txt", output_dir);
@@ -668,7 +855,7 @@ void saveDocumentsTopicsSentencesAttentions(senDocument** corpus, Model * model,
     FILE* topic_dis_fp = fopen(filename,"w");
     FILE* attentions_fp = fopen(attentionfilename,"w");
     int win = model->win;
-    for (int d = 0; d < model->num_docs; d++) {
+    for (int d = 0; d < model->test_num_docs; d++) {
            fprintf(liks_fp, "%lf\n", corpus[d]->doclik);
            senDocument* doc = corpus[d];
            fprintf(topic_dis_fp, "%lf", doc->doctopic[0]);
@@ -702,48 +889,37 @@ void print_mat(double* mat, int row, int col, char* filename) {
     fclose(fp);
 }
 
-void print_lik(double* likehood_record, int num_round, char* model_root) {
-    char lik_file[1000];
-    sprintf(lik_file, "%s/likehood.dat", model_root);
-    FILE* fp = fopen(lik_file,"w");
-    for (int i = 0; i <= num_round; i++) {
-        fprintf(fp, "%03d %lf\n", i, likehood_record[i]);
-    }
-    fclose(fp);
-}
-
 int main(int argc, char* argv[]) {
 	//begin_rbm(argv[1],argv[2],atoi(argv[3]),atoi(argv[4]),argv[5], argv[6],argv[7]);
 /*	if(argc <= 1 || !(strcmp(argv[1],"est") == 0 && (argc == 6  || argc == 8))  || !(strcmp(argv[1],"inf") == 0 && argc == 6)){
 
 	}*/
-	if (argc > 1 && argc == 7 && strcmp(argv[1],"est") == 0) {
+	if (argc > 1 && argc == 5 && strcmp(argv[1],"est") == 0) {
 		printf("Now begin training...\n");
-		begin_ratm(argv[2],argv[3],atoi(argv[4]),atoi(argv[5]),argv[6],argv[7],NULL);
-	}else if(argc > 1 && argc == 9 && strcmp(argv[1],"est") == 0){
+		begin_ratm(argv[2],argv[3], argv[4], NULL);
+	}else if(argc > 1 && argc == 6 && strcmp(argv[1],"est") == 0){
 		printf("Now begin training with initial parameters...\n");
-		begin_ratm(argv[2],argv[3],atoi(argv[4]),atoi(argv[5]),argv[6], argv[7],argv[8]);
-	}else if(argc > 1 && argc == 8 && strcmp(argv[1],"inf") == 0){
+		begin_ratm(argv[2],argv[3], argv[4], argv[5]);
+	}else if(argc > 1 && argc == 7 && strcmp(argv[1],"inf") == 0){
 		printf("Now begin inference...\n");
-		//infer_rbm(char* test_file, char* settingfile, char* model_root, char* prefix, char* out_dir=NULL)
-		infer_ratm(argv[2], argv[3], argv[4],argv[5], argv[6],argv[7]);
+		infer_ratm(argv[2], argv[3], argv[4],argv[5], argv[6]);
 	}
 	else {
 		printf("Please use the following setting.\n");
 		printf("\n");
 		printf("*************Trainning***********************\n");
 
-		printf("G0 = [N D]\n N: ignore the G_0 \n D: use the topic distribution of doc as the G_0\n");
+		printf("Pleae set G0 = [0 1] in setting.txt \n 0: ignore the G0 \n 1: use the topic distribution of doc as the G0\n");
 		printf("\n");
 		printf(
-				"./ratm est <input data file> <setting.txt> <num_topics> <num_windows> <G0> <model save dir>\n\n");
+				"./ratm est <setting.txt>  <input data file><model save dir>\n\n");
 		printf(
 				"If you want to initialize the model with default parameters, please use: \n");
 		printf(
-				"./ratm est <input data file> <setting.txt> <num_topics> <num_windows> <G0> <model save dir> <topic_dis_overwords_beta file >\n\n");
+				"./ratm est <setting.txt> <input data file> <model save dir> <topic_dis_overwords_beta file >\n\n");
 		printf("**************Inference**********************\n");
 		printf(
-				"./ratm inf <input test data file> <setting.txt> <G0> <model dir> <perfix> <output dir>\n");
+				"./ratm inf <setting.txt> <input test data file> <model dir> <perfix> <output dir>\n");
 		printf("\n");
 	}
 	return 0;

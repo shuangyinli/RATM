@@ -11,7 +11,7 @@ void doInference(senDocument* doc, Model* model, Configuration* configuration) {
     int num_sentence = doc->num_sentences;
     int win = model->win;
     int num_topics = model->num_topics;
-    char * G0 = model->G0;
+    int G0 = model->G0;
     //update the rou of document
 
     while((doc_var_converence > configuration->doc_var_converence) && (doc_max_var_iter < configuration->doc_max_var_iter)){ //judge the whole doc converged
@@ -25,7 +25,7 @@ void doInference(senDocument* doc, Model* model, Configuration* configuration) {
     		double sen_lik;
     		Sentence* sentence = doc->sentences[s];
 
-    		if(!strcmp(G0,"D")){
+    		if(G0 == 1){
 				for (int i = 0; i < win - 1; i++) {
 					for (int k = 0; k < num_topics; k++) {
 						sentence->wintopics[i * num_topics + k] = doc->docTopicMatrix[(i + s + 1) * num_topics + k];
@@ -34,7 +34,7 @@ void doInference(senDocument* doc, Model* model, Configuration* configuration) {
 				for (int k = 0; k < num_topics; k++) {
 					sentence->wintopics[(win-1) * num_topics + k] =doc->doctopic[k];
 				}
-			}else if (!strcmp(G0,"N")) {
+			}else if (G0 == 0) {
 				for (int i = 0; i < win; i++) {
 					for (int k = 0; k < num_topics; k++) {
 						sentence->wintopics[i * num_topics + k] = doc->docTopicMatrix[(i + s) * num_topics + k];
@@ -53,7 +53,7 @@ void doInference(senDocument* doc, Model* model, Configuration* configuration) {
     		        var_iter ++;
     		        inferenceXi(sentence,model, configuration);
     		        inferenceGamma(sentence, model);
-    		        sen_lik = compute_sen_likelihood(sentence,model);
+    		        sen_lik = inference_sen_likelihood(sentence,model);
     		        sentence->senlik = sen_lik;
     		        sen_converged = (sen_lik_old -sen_lik) / sen_lik_old;
     		        if(sen_converged <0){
@@ -79,8 +79,8 @@ void doInference(senDocument* doc, Model* model, Configuration* configuration) {
     		delete[] old_sen_xi;
 
     	}
-    	//TODO check the topic dis of doc
-    	doc_lik = compute_doc_likelihood2(doc, model);
+    	//here do not update the topics of each doc.
+    	doc_lik = compute_doc_likelihood(doc, model);
     	doc_var_converence = fabs(doc_lik_old - doc_lik);
     	doc_lik_old=doc_lik;
     }
@@ -98,6 +98,7 @@ void inferenceRou(senDocument* document, Model* model) {
 	    double * doc_rou = document->rou;
 	    double * alpha = model->alpha;
 	    double sigma_rou = 0.0;
+        memset(doc_rou, 0.0, sizeof(double) * num_topics);
 
 	    for(int s =0; s<num_sentence; s++){
 	    	Sentence* sentence = document->sentences[s];
@@ -112,7 +113,7 @@ void inferenceRou(senDocument* document, Model* model) {
 	    			}
 	    			doc_rou[k] += sigma_gamma * (sentence->xi[win - 1] / sigma_xi);
 	    			if (isnan(doc_rou[k]) || isinf(doc_rou[k])) {
-	    				printf("rou nan");
+	    				printf("rou is nan ");
 	    			}
 	    		}
 	    }
@@ -316,12 +317,57 @@ inline void initXi(double* xi,int win) {
     for (int i = 0; i < win; i++) xi[i] = util::random();//init 100?!
 }
 
-void LDAInference(senDocument** corpus, Model* model, Configuration* configuration) {
-    int num_docs = model->num_docs;
+double verifyTestSet(senDocument** test_corpus, Model* model, Configuration* configuration, int test_num_docs) {
+    int win = model->win;
+    int num_topics = model->num_topics;
+    int G0 = model->G0;
+    int num_words = model->num_words;
+    bool* reset_beta_flag = new bool[num_topics * model->num_words];
+    memset(reset_beta_flag, 0, sizeof(bool) * num_topics * model->num_words);
+    for(int d=0; d< test_num_docs; d++){
+        senDocument* doc = test_corpus[d];
+        for(int s =0; s<doc->num_sentences; s++){
+            Sentence* sentence = doc->sentences[s];
+            if(G0 == 1){
+                for (int i = 0; i < win - 1; i++)
+                    for (int k = 0; k < num_topics; k++) sentence->wintopics[i * num_topics + k] = doc->docTopicMatrix[(i + s + 1) * num_topics + k];
+                for (int k = 0; k < num_topics; k++) sentence->wintopics[(win-1) * num_topics + k] =doc->doctopic[k];
+            }else if (G0 == 0) {
+                for (int i = 0; i < win; i++)
+                    for (int k = 0; k < num_topics; k++) sentence->wintopics[i * num_topics + k] = doc->docTopicMatrix[(i + s) * num_topics + k];  
+            }
+            inferenceXi(sentence,model, configuration);
+            inferenceGamma(sentence, model);
+            sentence->senlik = inference_sen_likelihood(sentence,model);
+        }
+    }
+        for (int d = 0; d < test_num_docs; d++) {
+            for(int s = 0; s<test_corpus[d]->num_sentences;s++){
+                Sentence* sentence = test_corpus[d]->sentences[s];
+                for (int k = 0; k < num_topics; k++) {
+                    for (int i = 0; i < sentence->num_words; i++) {
+                        int wordid = sentence->words_ptr[i];
+                        if (!reset_beta_flag[k * num_words + wordid]) {
+                        reset_beta_flag[k * num_words + wordid] = true;
+                        model->log_beta[k * num_words + wordid] = log(sentence->words_cnt_ptr[i])+ sentence->log_gamma[i * num_topics + k];
+                        } 
+                        else model->log_beta[k * num_words + wordid] = util::log_sum(model->log_beta[k * num_words + wordid], sentence->log_gamma[i * num_topics + k]+ log(sentence->words_cnt_ptr[i]));
+                    }
+                }
+            }
+        }
+    normalize_log_matrix_rows(model->log_beta, num_topics, model->num_words);
+    delete[] reset_beta_flag;
+    return corpuslikelihood(test_corpus, model, test_num_docs);
+}
+
+double LDAInference(senDocument** corpus, Model* model, int num_docs) {
+    //int num_docs = model->num_docs;
     int num_words = model->num_words;
     int num_topics = model->num_topics;
     double* sum_phi_w = new double[num_words];
-    printf("num_docs: %d\nnum_words: %d\nnum_topics: %d\n", num_docs, num_words, num_topics);
+    double lik = 0.0;
+    //printf("num_docs: %d\nnum_words: %d\nnum_topics: %d\n", num_docs, num_words, num_topics);
     for (int w = 0; w < num_words; w++) {
         sum_phi_w[w] = 0;
         for (int k =0; k < num_topics; k++) sum_phi_w[w] += exp(model->log_beta[k * num_words + w]);
@@ -330,7 +376,9 @@ void LDAInference(senDocument** corpus, Model* model, Configuration* configurati
     for (int d = 0; d < num_docs; d++) {
        senDocument* doc = corpus[d];
        int num_sentences = doc->num_sentences;
+       
        for(int s = 0; s< num_sentences; s++){
+            
     	   Sentence * sentence = doc->sentences[s];
     	   double* topic = sentence->topic;
     	   int sen_num_words = sentence->num_words;
@@ -343,7 +391,9 @@ void LDAInference(senDocument** corpus, Model* model, Configuration* configurati
     		   }
     		   sum_topic += topic[k];
     	   }
+          
     	   for (int k = 0; k < num_topics; k++) topic[k] /= sum_topic;
+           
     	   sentence->senlik = 0;
     	   for (int w = 0; w < sen_num_words; w++) {
     		   int wordid = sentence->words_ptr[w];
@@ -351,12 +401,16 @@ void LDAInference(senDocument** corpus, Model* model, Configuration* configurati
     	       for (int k = 0; k < num_topics; k++) {
     	    	   sum_pr += topic[k] * exp(model->log_beta[k * num_words + wordid]);
     	       }
-    	       sentence->senlik += log(sum_pr) * sentence->words_cnt_ptr[w];
+    	       sentence->senlik += log(sum_pr);
+               lik +=sentence->senlik;
     	   }
+           
        }
+       
 
     }
     delete[] sum_phi_w;
+    return lik;
 }
 
 void* ThreadInference(void* thread_data) {
@@ -372,10 +426,9 @@ void* ThreadInference(void* thread_data) {
     return NULL;
 }
 
-void runThreadInference(senDocument** corpus, Model* model, Configuration* configuration) {
+void runThreadInference(senDocument** corpus, Model* model, Configuration* configuration, int num_docs) {
     int num_threads = configuration->num_threads;
     pthread_t* pthread_ts = new pthread_t[num_threads];
-    int num_docs = model->num_docs;
     int num_per_threads = num_docs/num_threads;
     int i;
     ThreadData** thread_datas = new ThreadData* [num_threads];

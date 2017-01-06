@@ -10,4 +10,8 @@ sen_var_converence 1e-10
 sen_max_var_iter 30
 doc_var_converence 0.001
 doc_max_var_iter 3
-em_converence 1e-4
+em_converence 1e-6
+num_topics 50
+window 4
+G0 1
+test yes

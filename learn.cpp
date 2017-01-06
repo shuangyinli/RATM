@@ -10,9 +10,8 @@ void initPi(double* pi, int win) {
     }
 }
 
-double getPiFunction(senDocument** corpus, Model* model) {
+double getPiFunction(senDocument** corpus, Model* model, int num_docs) {
     double pi_function_value = 0.0;
-    int num_docs = model->num_docs;
     double* pi = model->pi;
     for (int d = 0; d < num_docs; d++) {
     	 senDocument* doc = corpus[d];
@@ -37,9 +36,8 @@ double getPiFunction(senDocument** corpus, Model* model) {
     return pi_function_value;
 }
 
-void getDescentPi(senDocument** corpus, Model* model, double* descent_pi) {
+void getDescentPi(senDocument** corpus, Model* model, double* descent_pi, int num_docs) {
     int win = model->win;
-    int num_docs = model->num_docs;
     memset(descent_pi,0,sizeof(double)* win);
     double* pi = model->pi;
     for (int d = 0; d < num_docs; d++) {
@@ -63,7 +61,7 @@ void getDescentPi(senDocument** corpus, Model* model, double* descent_pi) {
     }
 }
 
-void learnPi(senDocument** corpus, Model* model, Configuration* configuration) {
+void learnPi(senDocument** corpus, Model* model, Configuration* configuration, int num_docs) {
     int num_round = 0;
     int win = model->win;
     double* last_pi = new double [model->win];
@@ -72,7 +70,7 @@ void learnPi(senDocument** corpus, Model* model, Configuration* configuration) {
     int num_wait_for_z = 0;
     do {
     	initPi(model->pi,win);
-        z = getPiFunction(corpus,model);
+        z = getPiFunction(corpus,model, num_docs);
         num_wait_for_z ++;
     }
     while ( z < 0 && num_wait_for_z <= 20);
@@ -85,12 +83,12 @@ void learnPi(senDocument** corpus, Model* model, Configuration* configuration) {
     do {
         last_z = z;
         memcpy(last_pi,model->pi,sizeof(double) * win);
-        getDescentPi(corpus,model,descent_pi);
+        getDescentPi(corpus,model,descent_pi, num_docs);
         for (int i = 0; !has_neg_value_flag && i < win; i++) {
             model->pi[i] += learn_rate * descent_pi[i];
             if (model->pi[i] < 0) has_neg_value_flag = true;
         }
-        if (has_neg_value_flag || last_z > (z=getPiFunction(corpus,model))) {
+        if (has_neg_value_flag || last_z > (z=getPiFunction(corpus,model, num_docs))) {
             learn_rate *= 0.1;
             z = last_z;
             //for ( int i = 0; i < num_labels; i++) pi[i] = last_pi[i];
@@ -105,8 +103,7 @@ void learnPi(senDocument** corpus, Model* model, Configuration* configuration) {
     delete[] descent_pi;
 }
 
-void learnBeta(senDocument** corpus, Model* model) {
-	int num_docs = model->num_docs;
+void learnBeta(senDocument** corpus, Model* model, int num_docs) {
 	int num_topics = model->num_topics;
 	int num_words = model->num_words;
 	bool* reset_beta_flag = new bool[num_topics * model->num_words];

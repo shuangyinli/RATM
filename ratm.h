@@ -84,20 +84,33 @@ struct senDocument{
 };
 
 struct Model {
-	int num_docs;
 	int num_words;
 	int num_topics;
 	int win;
-	int num_all_words;
+	int num_docs;
+    int test_num_docs;
+    int train_num_docs;
+
+	int G0;
+    int num_all_words_in_test;
+    int num_all_words_in_train;
+
 	double* pi;
 	double* log_beta;
-	char * G0;
+
 	double* alpha;
-	Model(int num_docs_, int num_words_, int num_topics_, int win_, int num_all_words_, char* G0_ = NULL, Model* init_model = NULL){
+	Model(int num_docs_, int test_num_docs_, int train_num_docs_,
+		int num_all_wordsintest_, int num_all_wordsintrain_,
+		int num_words_, int num_topics_, int win_, int G0_, Model* init_model = NULL){
 		num_docs = num_docs_;
+		test_num_docs = test_num_docs_;
+		train_num_docs = train_num_docs_;
+
+		num_all_words_in_test = num_all_wordsintest_;
+		num_all_words_in_train = num_all_wordsintrain_;
+
 		num_words = num_words_;
 		win = win_;
-		num_all_words = num_all_words_;
 		num_topics = num_topics_;
 		G0 = G0_;
 		pi = new double[win];
@@ -143,6 +156,10 @@ struct Configuration {
     double sen_var_converence;
     double doc_var_converence;
     double em_converence;
+    int test;
+    int num_topics;
+    int win;
+    int G0;
     Configuration(char* settingfile) {
         pi_learn_rate = 0.00001;
         max_pi_iter = 100;
@@ -157,24 +174,20 @@ struct Configuration {
         doc_var_converence = 0.001;
         doc_max_var_iter = 3;
         em_converence = 1e-4;
+        test = 0;
+        num_topics =0;
+        win = 0;
+        G0= 0;// init N
         if(settingfile) read_settingfile(settingfile);
     }
     void read_settingfile(char* settingfile);
 };
-
-double compute_sen_likelihood(Sentence* sentence, Model* model);
+double inference_sen_likelihood(Sentence* sentence, Model* model);
 double compute_doc_likelihood(senDocument* doc, Model* model);
-double corpuslikelihood(senDocument** corpus, Model* model);
-double compute_sen_likelihood2(senDocument* doc, Sentence* sentence, Model* model);
-double compute_doc_likelihood2(senDocument* doc, Model* model);
-double corpuslikelihood2(senDocument** corpus, Model* model);
-double quick_compute_sen_likelihood(senDocument* doc, Sentence* sentence, Model* model);
-double quick_compute_doc_likelihood(senDocument* doc, Model* model);
-double quick_corpuslikelihood(senDocument** corpus, Model* model);
-void print_mat(double* mat, int row, int col, char* filename);
+double compute_sen_likelihood(senDocument* doc, Sentence* sentence, Model* model);
 void printParameters(senDocument** corpus, int num_round, char* model_root, Model* model);
-void print_lik(double* likehood_record, int num_round, char* model_root);
-void readinitParameters(senDocument** corpus, Model* model, char* beta_file);
-void saveDocumentsTopicsSentencesAttentions(senDocument** corpus, Model* model, char* output_dir);
+void saveDocumentsTopicsSentencesAttentions(senDocument** corpus, Model * model, char* output_dir);
+void print_mat(double* mat, int row, int col, char* filename);
+double corpuslikelihood(senDocument** corpus, Model* model, int num_docs);
 
 #endif
