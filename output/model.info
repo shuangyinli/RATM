@@ -5,5 +5,5 @@ test_num_docs: 4173
 train_num_docs: 16693
 num_all_words_in_test: 284877
 num_all_words_in_train: 1146373
-win: 5
-G0: 1
+win: 4
+G0: 0

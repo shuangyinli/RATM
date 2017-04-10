@@ -13,5 +13,5 @@ doc_max_var_iter 3
 em_converence 1e-6
 num_topics 50
 window 4
-G0 1
+G0 0
 test yes
