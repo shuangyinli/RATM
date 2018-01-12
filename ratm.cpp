@@ -392,8 +392,8 @@ double compute_sen_likelihood(senDocument* doc, Sentence* sentence, Model* model
 		int num_topics = model->num_topics;
 		int num_words = model->num_words;
 		double* log_topic = new double[num_topics];
-		memcpy(log_topic, doc->doctopic, sizeof(double) * num_topics);
-		//memcpy(log_topic, sentence->topic, sizeof(double) * num_topics);
+		//memcpy(log_topic, doc->doctopic, sizeof(double) * num_topics);
+		memcpy(log_topic, sentence->topic, sizeof(double) * num_topics);
 		bool* reset_log_topic = new bool[num_topics];
 		memset(reset_log_topic, false, sizeof(bool) * num_topics);
 
@@ -568,10 +568,14 @@ void initDocTopics(senDocument** corpus, Model* model){
 	int num_docs =  model->num_docs;
 	int num_topics = model->num_topics;
 
-
+	printf("begin to convert lda corpus \n");
 	Sentence ** lda_corpus = convert_to_lda_corpus(corpus, model, num_docs);
 
 	for(int i =0; i<num_docs; i++){
+		if(i % 5000 == 0){
+			printf(" lda inference doc: %d \n ", i);
+		}
+		
 		Sentence* doc = lda_corpus[i];
 		int num_words_in_doc = doc->num_words;
 		double * docgamma = doc->log_gamma;
@@ -597,6 +601,7 @@ void initDocTopics(senDocument** corpus, Model* model){
 		delete [] docphi;
 	}
 
+	printf("end to inference by lda  \n");
 	//init all the sentence's topic distribution with the document topic distribution
 	for(int d=0; d<num_docs; d++){
 		int senno = corpus[d]->num_sentences;
